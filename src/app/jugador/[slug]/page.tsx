@@ -4,9 +4,11 @@ import { supabase } from "@/lib/supabase";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Radar as RadarFill } from 'recharts';
 import { motion } from "framer-motion";
 
-export default function PerfilJugador({ params }: { params: Promise<{ id: string }> }) {
+
+// 1. Cambiamos params para que reciba 'slug' en lugar de 'id'
+export default function PerfilJugador({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = React.use(params);
-  const id = resolvedParams.id;
+  const slug = resolvedParams.slug; // <--- Ahora Next.js mapea la carpeta [slug] a esta variable
   
   const [jugador, setJugador] = useState<any>(null);
   const [rankingPos, setRankingPos] = useState<number | null>(null);
@@ -14,31 +16,32 @@ export default function PerfilJugador({ params }: { params: Promise<{ id: string
 
   useEffect(() => {
     const fetchDatosYRanking = async () => {
-      // 1. Traemos a todos los jugadores ordenados para calcular la posición
-      const { data: todos } = await supabase
+      // 1. Buscamos la info completa usando el slug
+      const { data } = await supabase
         .from('jugadores')
-        .select('nombre, puntos, games_favor, games_contra')
-        .order('puntos', { ascending: false })
-        .order('games_favor', { ascending: false });
+        .select('*')
+        .eq('slug', slug) // <--- Filtramos por la columna slug
+        .single();
 
-      if (todos) {
-        // Encontramos la posición del jugador actual
-        const index = todos.findIndex(j => j.nombre.toLowerCase() === id.toLowerCase());
-        setRankingPos(index !== -1 ? index + 1 : null);
-        
-        // 2. Traemos la info completa del jugador
-        const { data } = await supabase
+      if (data) {
+        setJugador(data);
+
+        // 2. Calculamos el ranking (usando el nombre real para comparar si querés)
+        const { data: todos } = await supabase
           .from('jugadores')
-          .select('*')
-          .ilike('nombre', id)
-          .single();
+          .select('nombre, puntos, games_favor')
+          .order('puntos', { ascending: false })
+          .order('games_favor', { ascending: false });
 
-        if (data) setJugador(data);
+        if (todos) {
+          const index = todos.findIndex(j => j.nombre === data.nombre);
+          setRankingPos(index !== -1 ? index + 1 : null);
+        }
       }
       setLoading(false);
     };
     fetchDatosYRanking();
-  }, [id]);
+  }, [slug]);
 
   if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-mono tracking-widest">Calculando posición...</div>;
   if (!jugador) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-mono">Jugador no encontrado.</div>;
@@ -58,14 +61,13 @@ export default function PerfilJugador({ params }: { params: Promise<{ id: string
       </a>
 
       <div className="max-w-5xl mx-auto pt-12">
-        
-        {/* HEADER: FOTO + RANKING POS */}
         <div className="flex flex-col md:flex-row items-center gap-10 mb-16">
           <motion.div 
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             className="relative"
           >
+            {/* Usamos la URL de la foto que configuramos en Supabase Storage */}
             {jugador.foto_url ? (
                <img src={jugador.foto_url} alt={jugador.nombre} className="w-56 h-56 rounded-[3rem] object-cover border-2 border-green-500/50 shadow-[0_0_40px_rgba(34,197,94,0.2)]" />
             ) : (
@@ -73,7 +75,6 @@ export default function PerfilJugador({ params }: { params: Promise<{ id: string
                 {jugador.nombre[0]}
               </div>
             )}
-            {/* ESTO ES LO QUE PEDISTE: POSICIÓN DE RANKING */}
             <div className="absolute -bottom-4 -right-4 bg-green-500 text-black px-6 py-2 rounded-2xl font-black text-3xl italic shadow-2xl">
               #{rankingPos}
             </div>
@@ -94,16 +95,12 @@ export default function PerfilJugador({ params }: { params: Promise<{ id: string
           </div>
         </div>
 
-        {/* GRID DE INFORMACIÓN */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
           <div className="space-y-8 bg-slate-900/30 p-8 rounded-[2rem] border border-slate-800">
-            {/* PUNTOS MOVIDOS AQUÍ */}
             <div className="bg-green-500/10 border border-green-500/20 p-6 rounded-3xl">
               <p className="text-xs font-bold text-green-500 uppercase tracking-widest mb-1">Puntos Totales</p>
               <p className="text-4xl font-black text-white">{jugador.puntos}</p>
             </div>
-            
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Perfil</p>
               <p className="text-xl font-bold">{jugador.perfil || "Diestro"}</p>
@@ -140,7 +137,6 @@ export default function PerfilJugador({ params }: { params: Promise<{ id: string
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </main>
