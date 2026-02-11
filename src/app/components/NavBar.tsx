@@ -1,5 +1,6 @@
 'use client';
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export default function NavBar() {
@@ -21,16 +22,16 @@ export default function NavBar() {
     >
       <div className="max-w-7xl mx-auto">
         <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-3 flex items-center justify-between shadow-2xl">
-          <a href="/" className="font-black tracking-tighter italic text-xl hover:text-[#bef264] transition-colors">
+          <Link href="/" className="font-black tracking-tighter italic text-xl hover:text-[#bef264] transition-colors">
             PADEL<span className="text-[#bef264]">.</span>
-          </a>
+          </Link>
           <div className="flex items-center gap-2">
-            <a href="/" className={linkClase('/')}>
+            <Link href="/" className={linkClase('/')}>
               Ranking
-            </a>
-            <a href="/historial" className={linkClase('/historial')}>
+            </Link>
+            <Link href="/historial" className={linkClase('/historial')}>
               Historial
-            </a>
+            </Link>
           </div>
         </div>
       </div>

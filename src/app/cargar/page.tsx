@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 import { motion } from "framer-motion";
-
-type TipoPartido = 'martes' | 'viernes';
+import type { Jugador, TipoPartido } from "@/lib/types";
 
 export default function CargarPartido() {
   const [authorized, setAuthorized] = useState(false);
-  const [jugadores, setJugadores] = useState<any[]>([]);
+  const [jugadores, setJugadores] = useState<Jugador[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Tipo de partido
@@ -296,9 +296,9 @@ export default function CargarPartido() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center justify-center">
-      <a href="/" className="fixed top-6 left-6 text-gray-500 hover:text-white transition-all flex items-center gap-2 text-sm font-mono uppercase tracking-widest z-50">
+      <Link href="/" className="fixed top-6 left-6 text-gray-500 hover:text-white transition-all flex items-center gap-2 text-sm font-mono uppercase tracking-widest z-50">
         ← Volver
-      </a>
+      </Link>
       
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
