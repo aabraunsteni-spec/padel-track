@@ -1,9 +1,12 @@
 'use client';
+import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
+import type { Jugador, Partido } from "@/lib/types";
 
 const Section = ({ children, title }: { children: React.ReactNode, title: string }) => (
   <motion.section
@@ -21,8 +24,8 @@ const Section = ({ children, title }: { children: React.ReactNode, title: string
 );
 
 export default function Home() {
-  const [jugadores, setJugadores] = useState<any[]>([]);
-  const [partidos, setPartidos] = useState<any[]>([]);
+  const [jugadores, setJugadores] = useState<Jugador[]>([]);
+  const [partidos, setPartidos] = useState<Partido[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -31,14 +34,14 @@ export default function Home() {
         .select('*')
         .order('puntos', { ascending: false })
         .order('games_favor', { ascending: false });
-      if (dataJugadores) setJugadores(dataJugadores);
+      if (dataJugadores) setJugadores(dataJugadores as Jugador[]);
 
       const { data: dataPartidos } = await supabase
         .from('partidos')
         .select('*')
         .order('fecha', { ascending: false })
         .limit(5);
-      if (dataPartidos) setPartidos(dataPartidos);
+      if (dataPartidos) setPartidos(dataPartidos as Partido[]);
     };
     fetchData();
   }, []);
@@ -86,15 +89,17 @@ export default function Home() {
                     <td className="p-4 md:p-5 font-bold flex items-center gap-3">
                       <span className="text-slate-700 font-mono text-xs w-4">{i + 1}</span>
                       <div className="flex-shrink-0 w-12 h-12 relative">
-                        <img
+                        <Image
                           src={j.foto_url || "/default-avatar.png"}
                           alt={j.nombre}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl object-cover border border-white/10"
                         />
                       </div>
-                      <a href={`/jugador/${j.slug}`} className="group-hover:text-[#bef264] uppercase transition-colors tracking-tighter text-sm md:text-lg">
+                      <Link href={`/jugador/${j.slug}`} className="group-hover:text-[#bef264] uppercase transition-colors tracking-tighter text-sm md:text-lg">
                         {j.nombre}
-                      </a>
+                      </Link>
                     </td>
                     <td className="p-4 md:p-5 text-center text-slate-400 font-mono text-xs md:text-sm">{j.partidos_jugados}</td>
                     <td className={`p-4 md:p-5 text-center font-mono text-xs md:text-sm font-bold ${difGames > 0 ? 'text-[#bef264]' : 'text-red-400'}`}>
@@ -130,22 +135,21 @@ export default function Home() {
           })}
 
           {/* LINK AL HISTORIAL */}
-          <motion.a
-            href="/historial"
+          <motion.div
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
             className="group w-full bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-[#bef264]/40 p-6 md:p-8 rounded-3xl flex justify-between items-center transition-all cursor-pointer"
           >
             <div className="flex-1" />
             <div className="text-center">
-              <span className="text-slate-500 group-hover:text-[#bef264] font-bold text-sm uppercase tracking-[0.2em] transition-colors">
+              <Link href="/historial" className="text-slate-500 group-hover:text-[#bef264] font-bold text-sm uppercase tracking-[0.2em] transition-colors">
                 Ver historial completo
-              </span>
+              </Link>
             </div>
             <div className="flex-1 flex justify-end">
               <span className="text-slate-600 group-hover:text-[#bef264] group-hover:translate-x-1 transition-all text-xl">→</span>
             </div>
-          </motion.a>
+          </motion.div>
         </div>
       </Section>
 

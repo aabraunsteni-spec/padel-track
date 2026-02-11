@@ -1,16 +1,18 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Radar as RadarFill } from 'recharts';
+import { RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Radar as RadarFill } from 'recharts';
 import { motion } from "framer-motion";
 import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
+import type { Jugador } from "@/lib/types";
 
 export default function PerfilJugador({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = React.use(params);
   const slug = resolvedParams.slug;
 
-  const [jugador, setJugador] = useState<any>(null);
+  const [jugador, setJugador] = useState<Jugador | null>(null);
   const [rankingPos, setRankingPos] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -89,9 +91,11 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
           {/* Foto */}
           <div className="relative flex-shrink-0">
             {jugador.foto_url ? (
-              <img
+              <Image
                 src={jugador.foto_url}
                 alt={jugador.nombre}
+                width={224}
+                height={224}
                 className="w-48 h-48 md:w-56 md:h-56 rounded-[3rem] object-cover border border-white/10 shadow-[0_0_40px_rgba(190,242,100,0.1)]"
               />
             ) : (
@@ -191,7 +195,7 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
             {jugador.bio && (
               <div className="bg-white/[0.02] backdrop-blur-md border border-white/10 p-6 rounded-3xl flex-1">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Biografía</p>
-                <p className="text-sm text-gray-400 italic leading-relaxed">"{jugador.bio}"</p>
+                <p className="text-sm text-gray-400 italic leading-relaxed">&quot;{jugador.bio}&quot;</p>
               </div>
             )}
             <div className="bg-white/[0.02] backdrop-blur-md border border-white/10 p-6 rounded-3xl">

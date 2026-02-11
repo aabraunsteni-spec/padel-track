@@ -1,9 +1,10 @@
 'use client';
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
+import type { Jugador, Partido } from "@/lib/types";
 
 type Filtros = {
   año: string;
@@ -14,9 +15,8 @@ type Filtros = {
 };
 
 export default function HistorialPage() {
-  const [partidos, setPartidos] = useState<any[]>([]);
-  const [partidosFiltrados, setPartidosFiltrados] = useState<any[]>([]);
-  const [jugadores, setJugadores] = useState<any[]>([]);
+  const [partidos, setPartidos] = useState<Partido[]>([]);
+  const [jugadores, setJugadores] = useState<Pick<Jugador, "nombre">[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [paginaActual, setPaginaActual] = useState(1);
@@ -26,27 +26,28 @@ export default function HistorialPage() {
     año: "", mes: "", dia: "", tipo: "", jugador: ""
   });
 
-  useEffect(() => { fetchData(); }, []);
-  useEffect(() => { aplicarFiltros(); }, [filtros, partidos]);
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: dataPartidos } = await supabase
+        .from('partidos')
+        .select('*')
+        .order('fecha', { ascending: false });
 
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: dataPartidos } = await supabase
-      .from('partidos')
-      .select('*')
-      .order('fecha', { ascending: false });
+      const { data: dataJugadores } = await supabase
+        .from('jugadores')
+        .select('nombre')
+        .order('nombre', { ascending: true });
 
-    const { data: dataJugadores } = await supabase
-      .from('jugadores')
-      .select('nombre')
-      .order('nombre', { ascending: true });
+      if (dataPartidos) setPartidos(dataPartidos as Partido[]);
+      if (dataJugadores) setJugadores(dataJugadores as Pick<Jugador, "nombre">[]);
+      setLoading(false);
+    };
 
-    if (dataPartidos) setPartidos(dataPartidos);
-    if (dataJugadores) setJugadores(dataJugadores);
-    setLoading(false);
-  };
+    void fetchData();
+  }, []);
 
-  const aplicarFiltros = () => {
+  const partidosFiltrados = useMemo(() => {
     let resultado = [...partidos];
 
     if (filtros.año) {
@@ -67,12 +68,17 @@ export default function HistorialPage() {
       );
     }
 
-    setPartidosFiltrados(resultado);
+    return resultado;
+  }, [filtros, partidos]);
+
+
+  const actualizarFiltros = (nuevosFiltros: Filtros) => {
+    setFiltros(nuevosFiltros);
     setPaginaActual(1);
   };
 
   const limpiarFiltros = () => {
-    setFiltros({ año: "", mes: "", dia: "", tipo: "", jugador: "" });
+    actualizarFiltros({ año: "", mes: "", dia: "", tipo: "", jugador: "" });
   };
 
   const indiceUltimo = paginaActual * partidosPorPagina;
