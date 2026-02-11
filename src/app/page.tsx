@@ -32,7 +32,7 @@ export default function Home() {
       const { data: dataJugadores } = await supabase
         .from('jugadores')
         .select('*')
-        .order('puntos', { ascending: false })
+        .order('elo_rating', { ascending: false })
         .order('games_favor', { ascending: false });
       if (dataJugadores) setJugadores(dataJugadores as Jugador[]);
 
@@ -78,7 +78,7 @@ export default function Home() {
                 <th className="p-4 md:p-6">Jugador</th>
                 <th className="p-4 md:p-6 text-center">PJ</th>
                 <th className="p-4 md:p-6 text-center text-[#bef264]">Dif G</th>
-                <th className="p-4 md:p-6 text-center font-bold">Pts</th>
+                <th className="p-4 md:p-6 text-center font-bold">Elo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -105,7 +105,7 @@ export default function Home() {
                     <td className={`p-4 md:p-5 text-center font-mono text-xs md:text-sm font-bold ${difGames > 0 ? 'text-[#bef264]' : 'text-red-400'}`}>
                       {difGames > 0 ? `+${difGames}` : difGames}
                     </td>
-                    <td className="p-4 md:p-5 text-center font-black text-xl md:text-2xl text-white italic">{j.puntos}</td>
+                    <td className="p-4 md:p-5 text-center font-black text-xl md:text-2xl text-white italic">{Math.round(j.elo_rating || 1500)}</td>
                   </tr>
                 );
               })}
@@ -118,14 +118,17 @@ export default function Home() {
       <Section title="Últimos Resultados">
         <div className="w-full max-w-2xl space-y-4 px-4">
           {partidos.map((p) => {
-            const eq1Gano = p.sets_1[0] > p.sets_2[0];
+            const esViernes = p.tipo_partido === "viernes";
+            const score1 = esViernes ? (p.games_1 ?? 0) : (p.sets_1?.[0] ?? 0);
+            const score2 = esViernes ? (p.games_2 ?? 0) : (p.sets_2?.[0] ?? 0);
+            const eq1Gano = score1 > score2;
             return (
               <div key={p.id} className="bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 md:p-8 rounded-3xl flex justify-between items-center">
                 <div className={`text-right flex-1 font-bold text-sm md:text-lg ${eq1Gano ? 'text-white' : 'text-slate-600'}`}>
                   {p.equipo_1[0]} <span className="opacity-30">&</span> {p.equipo_1[1]}
                 </div>
                 <div className="mx-4 md:mx-8 bg-[#bef264] text-black px-4 py-1 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(190,242,100,0.3)] skew-x-[-12deg]">
-                  {p.sets_1[0]}-{p.sets_2[0]}
+                  {score1}-{score2}
                 </div>
                 <div className={`text-left flex-1 font-bold text-sm md:text-lg ${!eq1Gano ? 'text-white' : 'text-slate-600'}`}>
                   {p.equipo_2[0]} <span className="opacity-30">&</span> {p.equipo_2[1]}

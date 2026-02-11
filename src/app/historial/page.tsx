@@ -268,7 +268,10 @@ export default function HistorialPage() {
                 <tbody className="divide-y divide-white/5">
                   {partidosActuales.map((partido) => {
                     const fecha = new Date(partido.fecha);
-                    const eq1Gano = partido.sets_1?.[0] > partido.sets_2?.[0];
+                    const esViernes = partido.tipo_partido === "viernes";
+                    const score1 = esViernes ? (partido.games_1 ?? 0) : (partido.sets_1?.[0] ?? 0);
+                    const score2 = esViernes ? (partido.games_2 ?? 0) : (partido.sets_2?.[0] ?? 0);
+                    const eq1Gano = score1 > score2;
                     return (
                       <tr key={partido.id} className="hover:bg-[#bef264]/5 transition-all">
                         <td className="p-4 md:p-6 text-sm text-gray-400 font-mono whitespace-nowrap">
@@ -292,7 +295,7 @@ export default function HistorialPage() {
                         </td>
                         <td className="p-4 md:p-6 text-center">
                           <div className="inline-block bg-[#bef264] text-black px-4 py-1 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(190,242,100,0.3)] skew-x-[-12deg]">
-                            {partido.sets_1?.[0] || 0}-{partido.sets_2?.[0] || 0}
+                            {score1}-{score2}
                           </div>
                         </td>
                         <td className={`p-4 md:p-6 font-bold text-sm md:text-base ${!eq1Gano ? 'text-white' : 'text-slate-600'}`}>
