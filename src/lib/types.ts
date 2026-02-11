@@ -12,7 +12,6 @@ export type Jugador = {
   bio?: string | null;
   partidos_jugados?: number | null;
   partidos_ganados?: number | null;
-  puntos?: number | null;
   elo_rating?: number | null;
   games_favor?: number | null;
   games_contra?: number | null;

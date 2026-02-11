@@ -17,11 +17,11 @@ type SetCard = {
 
 const createSet = (): SetCard => ({ id: crypto.randomUUID(), a1: "", a2: "", b1: "", b2: "", games1: "", games2: "" });
 
-const recomputeElo = async () => {
-  const response = await fetch("/api/elo/recompute", { method: "POST" });
+const recomputeEndpoint = async (url: string, defaultError: string) => {
+  const response = await fetch(url, { method: "POST" });
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
-    throw new Error(detail?.error || "No se pudo recomputar Elo");
+    throw new Error(detail?.error || defaultError);
   }
 };
 
@@ -124,10 +124,12 @@ export default function ViernesCargarPage() {
     }
 
     try {
-      await recomputeElo();
+      await recomputeEndpoint("/api/elo/recompute", "No se pudo recomputar Elo");
+      await recomputeEndpoint("/api/stats/recompute", "No se pudo recomputar stats");
     } catch (error) {
       console.error(error);
-      alert("Se guardó la sesión, pero no se pudo recomputar Elo.");
+      const message = error instanceof Error ? error.message : "Error desconocido";
+      alert(`Se guardó la sesión, pero falló la recomputación: ${message}.`);
       setLoading(false);
       return;
     }

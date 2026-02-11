@@ -7,11 +7,11 @@ import type { Jugador } from "@/lib/types";
 
 type SetForm = { eq1: string; eq2: string };
 
-const recomputeElo = async () => {
-  const response = await fetch("/api/elo/recompute", { method: "POST" });
+const recomputeEndpoint = async (url: string, defaultError: string) => {
+  const response = await fetch(url, { method: "POST" });
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
-    throw new Error(detail?.error || "No se pudo recomputar elo");
+    throw new Error(detail?.error || defaultError);
   }
 };
 
@@ -100,9 +100,6 @@ export default function CargarPartido() {
     const gamesFavorEq1 = setsJugados.reduce((sum, s) => sum + parseInt(s.eq1, 10), 0);
     const gamesContraEq1 = setsJugados.reduce((sum, s) => sum + parseInt(s.eq2, 10), 0);
 
-    const ganadores = setsEq1 === 2 ? [equipo1.j1, equipo1.j2] : [equipo2.j1, equipo2.j2];
-    const perdedores = setsEq1 === 2 ? [equipo2.j1, equipo2.j2] : [equipo1.j1, equipo1.j2];
-
     const equipo1Ids = [equipo1.j1, equipo1.j2].map((nombre) => jugadores.find((j) => j.nombre === nombre)?.id ?? "");
     const equipo2Ids = [equipo2.j1, equipo2.j2].map((nombre) => jugadores.find((j) => j.nombre === nombre)?.id ?? "");
 
@@ -114,6 +111,8 @@ export default function CargarPartido() {
         equipo_2_ids: equipo2Ids.every(Boolean) ? equipo2Ids : null,
         sets_1: [setsEq1],
         sets_2: [setsEq2],
+        games_1: gamesFavorEq1,
+        games_2: gamesContraEq1,
         tipo_partido: "martes",
         fecha: new Date().toISOString(),
       },
@@ -125,54 +124,13 @@ export default function CargarPartido() {
       return;
     }
 
-    for (const nombre of ganadores) {
-      const jugador = jugadores.find((j) => j.nombre === nombre);
-      if (!jugador) continue;
-      const { data: statsActuales } = await supabase
-        .from("jugadores")
-        .select("partidos_jugados, puntos, games_favor, games_contra")
-        .eq("id", jugador.id)
-        .single();
-
-      if (statsActuales) {
-        await supabase
-          .from("jugadores")
-          .update({
-            partidos_jugados: (statsActuales.partidos_jugados || 0) + 1,
-            puntos: (statsActuales.puntos || 0) + 3,
-            games_favor: (statsActuales.games_favor || 0) + (setsEq1 === 2 ? gamesFavorEq1 : gamesContraEq1),
-            games_contra: (statsActuales.games_contra || 0) + (setsEq1 === 2 ? gamesContraEq1 : gamesFavorEq1),
-          })
-          .eq("id", jugador.id);
-      }
-    }
-
-    for (const nombre of perdedores) {
-      const jugador = jugadores.find((j) => j.nombre === nombre);
-      if (!jugador) continue;
-      const { data: statsActuales } = await supabase
-        .from("jugadores")
-        .select("partidos_jugados, games_favor, games_contra")
-        .eq("id", jugador.id)
-        .single();
-
-      if (statsActuales) {
-        await supabase
-          .from("jugadores")
-          .update({
-            partidos_jugados: (statsActuales.partidos_jugados || 0) + 1,
-            games_favor: (statsActuales.games_favor || 0) + (setsEq1 === 2 ? gamesContraEq1 : gamesFavorEq1),
-            games_contra: (statsActuales.games_contra || 0) + (setsEq1 === 2 ? gamesFavorEq1 : gamesContraEq1),
-          })
-          .eq("id", jugador.id);
-      }
-    }
-
     try {
-      await recomputeElo();
+      await recomputeEndpoint("/api/elo/recompute", "No se pudo recomputar elo");
+      await recomputeEndpoint("/api/stats/recompute", "No se pudo recomputar stats");
     } catch (error) {
       console.error(error);
-      alert("Se guardó el partido, pero no se pudo recalcular Elo");
+      const message = error instanceof Error ? error.message : "Error desconocido";
+      alert(`Se guardó el partido, pero falló la recomputación: ${message}`);
       setLoading(false);
       return;
     }
