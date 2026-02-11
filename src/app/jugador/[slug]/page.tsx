@@ -63,8 +63,10 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
     { subject: 'Resistencia', A: jugador.resistencia || 50 },
   ];
 
-  const winRate = jugador.partidos_jugados > 0
-    ? Math.round((jugador.partidos_ganados / jugador.partidos_jugados) * 100)
+  const partidosJugados = jugador.partidos_jugados ?? 0;
+  const partidosGanados = jugador.partidos_ganados ?? 0;
+  const winRate = partidosJugados > 0
+    ? Math.round((partidosGanados / partidosJugados) * 100)
     : 0;
 
   const difGames = (jugador.games_favor || 0) - (jugador.games_contra || 0);
