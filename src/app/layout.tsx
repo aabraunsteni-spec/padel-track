@@ -1,16 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "PADEL. | Ranking de Amigos",
@@ -18,7 +7,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PADEL. | Ranking Oficial",
     description: "Fijate quién es el #1 del ranking esta semana.",
-    images: ["/og-image.jpg"], 
+    images: ["/og-image.jpg"],
   },
 };
 
@@ -29,9 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#020617] text-white`}
-      >
+      <body className="antialiased bg-[#020617] text-white font-sans">
         {children}
       </body>
     </html>

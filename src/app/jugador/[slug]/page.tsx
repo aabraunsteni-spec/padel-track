@@ -29,8 +29,8 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
 
         const { data: todos } = await supabase
           .from('jugadores')
-          .select('nombre, puntos, games_favor')
-          .order('puntos', { ascending: false })
+          .select('nombre, elo_rating, games_favor')
+          .order('elo_rating', { ascending: false })
           .order('games_favor', { ascending: false });
 
         if (todos) {
@@ -141,10 +141,11 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+          className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8"
         >
           {[
-            { label: 'Puntos', value: jugador.puntos || 0, highlight: true },
+            { label: 'Elo', value: Math.round(jugador.elo_rating || 1500), highlight: true },
+            { label: 'Puntos (legacy)', value: jugador.puntos || 0, highlight: false },
             { label: 'Partidos Jugados', value: jugador.partidos_jugados || 0, highlight: false },
             { label: 'Win Rate', value: `${winRate}%`, highlight: false },
             { label: 'Dif. Games', value: difGames > 0 ? `+${difGames}` : difGames, highlight: false, color: difGames > 0 ? 'text-[#bef264]' : 'text-red-400' },
