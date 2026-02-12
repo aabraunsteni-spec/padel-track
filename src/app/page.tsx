@@ -6,106 +6,82 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
-import type { Jugador, Partido } from "@/lib/types";
+import type { Jugador, MatchRow } from "@/lib/types";
 
 const Section = ({ children, title }: { children: React.ReactNode, title: string }) => (
-  <motion.section
-    initial={{ opacity: 0, y: 50 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true, amount: 0.2 }}
-    transition={{ duration: 0.8 }}
-    className="min-h-screen flex flex-col items-center justify-center p-4 border-b border-white/5 relative"
-  >
-    <h2 className="text-3xl font-bold mb-10 text-[#bef264] uppercase tracking-tighter drop-shadow-[0_0_10px_rgba(190,242,100,0.3)]">{title}</h2>
-    <div className="w-full flex justify-center">
-      {children}
-    </div>
+  <motion.section className="min-h-screen flex flex-col items-center justify-center p-4 border-b border-white/5 relative">
+    <h2 className="text-3xl font-bold mb-10 text-[#bef264] uppercase tracking-tighter">{title}</h2>
+    <div className="w-full flex justify-center">{children}</div>
   </motion.section>
 );
 
 export default function Home() {
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
-  const [partidos, setPartidos] = useState<Partido[]>([]);
+  const [partidos, setPartidos] = useState<MatchRow[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       const { data: dataJugadores } = await supabase
         .from('jugadores')
-        .select('*')
-        .order('elo_rating', { ascending: false })
-        .order('games_favor', { ascending: false });
-      if (dataJugadores) setJugadores(dataJugadores as Jugador[]);
+        .select('id,nombre,slug,foto_url,elo_rating');
+
+      const { data: stats } = await supabase.from('player_stats').select('*');
+
+      if (dataJugadores) {
+        const byId = new Map((stats ?? []).map((s) => [s.player_id, s]));
+        const merged = dataJugadores.map((j) => {
+          const st = byId.get(j.id);
+          return {
+            ...j,
+            partidos_jugados: st?.matches_played ?? 0,
+            partidos_ganados: st?.matches_won ?? 0,
+            games_favor: st?.games_favor ?? 0,
+            games_contra: st?.games_contra ?? 0,
+          };
+        }) as Jugador[];
+
+        merged.sort((a, b) => (b.elo_rating ?? 0) - (a.elo_rating ?? 0));
+        setJugadores(merged);
+      }
 
       const { data: dataPartidos } = await supabase
-        .from('partidos')
-        .select('*')
-        .order('fecha', { ascending: false })
+        .from('matches')
+        .select('id, played_at, type, winner_team, games_team1, games_team2, match_players(team,jugadores(nombre))')
+        .eq('status', 'final')
+        .order('played_at', { ascending: false })
         .limit(5);
-      if (dataPartidos) setPartidos(dataPartidos as Partido[]);
+
+      if (dataPartidos) setPartidos(dataPartidos as unknown as MatchRow[]);
     };
-    fetchData();
+    void fetchData();
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#020617] text-white selection:bg-[#bef264]/30 overflow-x-hidden">
-
+    <main className="min-h-screen bg-[#020617] text-white overflow-x-hidden">
       <NavBar />
-
-      {/* HERO SECTION */}
-      <section className="h-screen flex flex-col items-center justify-center text-center p-5 relative overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[#bef264]/10 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px]" />
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.8 }}
-          className="z-10"
-        >
-          <h1 className="text-7xl md:text-[10rem] font-black mb-2 tracking-tighter italic leading-none">
-            PADEL<span className="text-[#bef264] drop-shadow-[0_0_20px_rgba(190,242,100,0.5)]">.</span>
-          </h1>
-          <p className="text-slate-400 text-xs md:text-base font-bold tracking-[0.4em] uppercase opacity-70">The Elite Amateur League</p>
-        </motion.div>
-        <div className="mt-24 animate-bounce text-[10px] text-slate-500 font-mono tracking-[0.5em] uppercase">Deslizar ↓</div>
+      <section className="h-screen flex flex-col items-center justify-center text-center p-5">
+        <h1 className="text-7xl md:text-[10rem] font-black">PADEL<span className="text-[#bef264]">.</span></h1>
       </section>
 
-      {/* RANKING */}
       <Section title="Ranking General">
-        <div className="w-full max-w-4xl bg-white/[0.02] backdrop-blur-md rounded-[2rem] border border-white/10 overflow-x-auto shadow-2xl">
+        <div className="w-full max-w-4xl bg-white/[0.02] rounded-[2rem] border border-white/10 overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-white/[0.05] text-slate-500 text-[10px] uppercase tracking-[0.2em]">
-              <tr>
-                <th className="p-4 md:p-6">Jugador</th>
-                <th className="p-4 md:p-6 text-center">PJ</th>
-                <th className="p-4 md:p-6 text-center text-[#bef264]">Dif G</th>
-                <th className="p-4 md:p-6 text-center font-bold">Elo</th>
-              </tr>
+            <thead className="bg-white/[0.05] text-slate-500 text-[10px] uppercase">
+              <tr><th className="p-4">Jugador</th><th className="p-4 text-center">PJ</th><th className="p-4 text-center">Dif G</th><th className="p-4 text-center">Elo</th></tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {jugadores.map((j, i) => {
                 const difGames = (j.games_favor || 0) - (j.games_contra || 0);
                 return (
-                  <tr key={j.id} className="hover:bg-[#bef264]/5 transition-all group">
-                    <td className="p-4 md:p-5 font-bold flex items-center gap-3">
-                      <span className="text-slate-700 font-mono text-xs w-4">{i + 1}</span>
-                      <div className="flex-shrink-0 w-12 h-12 relative">
-                        <Image
-                          src={j.foto_url || "/default-avatar.png"}
-                          alt={j.nombre}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl object-cover border border-white/10"
-                        />
-                      </div>
-                      <Link href={`/jugador/${j.slug}`} className="group-hover:text-[#bef264] uppercase transition-colors tracking-tighter text-sm md:text-lg">
-                        {j.nombre}
-                      </Link>
+                  <tr key={j.id}>
+                    <td className="p-4 font-bold flex items-center gap-3">
+                      <span className="text-slate-700 text-xs w-4">{i + 1}</span>
+                      <Image src={j.foto_url || "/default-avatar.png"} alt={j.nombre} width={48} height={48} className="rounded-xl object-cover border border-white/10" />
+                      <Link href={`/jugador/${j.slug}`}>{j.nombre}</Link>
                     </td>
-                    <td className="p-4 md:p-5 text-center text-slate-400 font-mono text-xs md:text-sm">{j.partidos_jugados}</td>
-                    <td className={`p-4 md:p-5 text-center font-mono text-xs md:text-sm font-bold ${difGames > 0 ? 'text-[#bef264]' : 'text-red-400'}`}>
-                      {difGames > 0 ? `+${difGames}` : difGames}
-                    </td>
-                    <td className="p-4 md:p-5 text-center font-black text-xl md:text-2xl text-white italic">{Math.round(j.elo_rating || 1500)}</td>
+                    <td className="p-4 text-center">{j.partidos_jugados}</td>
+                    <td className="p-4 text-center">{difGames > 0 ? `+${difGames}` : difGames}</td>
+                    <td className="p-4 text-center font-black">{Math.round(j.elo_rating || 1000)}</td>
                   </tr>
                 );
               })}
@@ -114,50 +90,28 @@ export default function Home() {
         </div>
       </Section>
 
-      {/* ÚLTIMOS RESULTADOS */}
       <Section title="Últimos Resultados">
         <div className="w-full max-w-2xl space-y-4 px-4">
           {partidos.map((p) => {
-            const esViernes = p.tipo_partido === "viernes";
-            const score1 = esViernes ? (p.games_1 ?? 0) : (p.sets_1?.[0] ?? 0);
-            const score2 = esViernes ? (p.games_2 ?? 0) : (p.sets_2?.[0] ?? 0);
-            const eq1Gano = score1 > score2;
+            const team1 = (p.match_players ?? []).filter((mp) => mp.team === 1).map((mp) => mp.jugadores?.nombre).join(' & ');
+            const team2 = (p.match_players ?? []).filter((mp) => mp.team === 2).map((mp) => mp.jugadores?.nombre).join(' & ');
+            const eq1Gano = p.winner_team === 1;
             return (
-              <div key={p.id} className="bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 md:p-8 rounded-3xl flex justify-between items-center">
-                <div className={`text-right flex-1 font-bold text-sm md:text-lg ${eq1Gano ? 'text-white' : 'text-slate-600'}`}>
-                  {p.equipo_1[0]} <span className="opacity-30">&</span> {p.equipo_1[1]}
-                </div>
-                <div className="mx-4 md:mx-8 bg-[#bef264] text-black px-4 py-1 rounded-xl font-black text-xl shadow-[0_0_20px_rgba(190,242,100,0.3)] skew-x-[-12deg]">
-                  {score1}-{score2}
-                </div>
-                <div className={`text-left flex-1 font-bold text-sm md:text-lg ${!eq1Gano ? 'text-white' : 'text-slate-600'}`}>
-                  {p.equipo_2[0]} <span className="opacity-30">&</span> {p.equipo_2[1]}
-                </div>
+              <div key={p.id} className="bg-white/[0.03] border border-white/10 p-6 rounded-3xl flex justify-between items-center">
+                <div className={`text-right flex-1 font-bold ${eq1Gano ? 'text-white' : 'text-slate-600'}`}>{team1}</div>
+                <div className="mx-4 bg-[#bef264] text-black px-4 py-1 rounded-xl font-black">{p.games_team1 ?? 0}-{p.games_team2 ?? 0}</div>
+                <div className={`text-left flex-1 font-bold ${!eq1Gano ? 'text-white' : 'text-slate-600'}`}>{team2}</div>
               </div>
             );
           })}
 
-          {/* LINK AL HISTORIAL */}
-          <motion.div
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="group w-full bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-[#bef264]/40 p-6 md:p-8 rounded-3xl flex justify-between items-center transition-all cursor-pointer"
-          >
-            <div className="flex-1" />
-            <div className="text-center">
-              <Link href="/historial" className="text-slate-500 group-hover:text-[#bef264] font-bold text-sm uppercase tracking-[0.2em] transition-colors">
-                Ver historial completo
-              </Link>
-            </div>
-            <div className="flex-1 flex justify-end">
-              <span className="text-slate-600 group-hover:text-[#bef264] group-hover:translate-x-1 transition-all text-xl">→</span>
-            </div>
-          </motion.div>
+          <div className="text-center">
+            <Link href="/historial" className="text-slate-400 hover:text-[#bef264] font-bold text-sm uppercase">Ver historial completo</Link>
+          </div>
         </div>
       </Section>
 
       <FloatingButton />
-
     </main>
   );
 }

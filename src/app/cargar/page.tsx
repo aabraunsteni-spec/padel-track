@@ -1,246 +1,243 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import type { Jugador } from "@/lib/types";
+import type { Jugador, MatchRow } from "@/lib/types";
+import { getOrCreateFridaySession, validateSetScore } from "@/lib/matches";
 
-type SetForm = { eq1: string; eq2: string };
+type SetForm = { set_no: number; games_team1: string; games_team2: string };
 
-const recomputeElo = async () => {
-  const response = await fetch("/api/elo/recompute", { method: "POST" });
-  if (!response.ok) {
-    const detail = await response.json().catch(() => null);
-    throw new Error(detail?.error || "No se pudo recomputar elo");
-  }
-};
+const emptySet = (setNo: number): SetForm => ({ set_no: setNo, games_team1: "", games_team2: "" });
 
-export default function CargarPartido() {
-  const [authorized, setAuthorized] = useState(false);
+const defaultTuesdaySets = [emptySet(1), emptySet(2)];
+
+export default function CargarPartidoPage() {
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
+  const [matches, setMatches] = useState<MatchRow[]>([]);
+  const [type, setType] = useState<"martes" | "viernes">("martes");
+  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [team1, setTeam1] = useState<string[]>(["", ""]);
+  const [team2, setTeam2] = useState<string[]>(["", ""]);
+  const [sets, setSets] = useState<SetForm[]>(defaultTuesdaySets);
   const [loading, setLoading] = useState(false);
-  const [equipo1, setEquipo1] = useState({ j1: "", j2: "" });
-  const [equipo2, setEquipo2] = useState({ j1: "", j2: "" });
-  const [sets, setSets] = useState<SetForm[]>([
-    { eq1: "", eq2: "" },
-    { eq1: "", eq2: "" },
-    { eq1: "", eq2: "" },
-  ]);
 
-  useEffect(() => {
-    const prepararPagina = async () => {
-      const claveIngresada = prompt("Ingresá la clave de administrador:");
-      const claveCorrecta = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
-
-      if (claveIngresada !== claveCorrecta || claveCorrecta === undefined) {
-        alert("Clave incorrecta. Volviendo al ranking...");
-        window.location.href = "/";
-        return;
-      }
-
-      setAuthorized(true);
-
-      const { data } = await supabase
-        .from("jugadores")
-        .select("id, nombre, slug")
-        .order("nombre", { ascending: true });
-      if (data) setJugadores(data);
-    };
-
-    void prepararPagina();
-  }, []);
-
-  const validarSet = (g1: number, g2: number): string | null => {
-    if ((g1 === 6 && g2 <= 4) || (g2 === 6 && g1 <= 4) || (g1 === 7 && (g2 === 5 || g2 === 6)) || (g2 === 7 && (g1 === 5 || g1 === 6))) {
-      return null;
-    }
-    return `Set inválido: ${g1}-${g2}`;
-  };
-
-  const handleGuardarMartes = async () => {
-    if (!equipo1.j1 || !equipo1.j2 || !equipo2.j1 || !equipo2.j2) {
-      alert("Completá todos los jugadores");
-      return;
-    }
-
-    const participantes = [equipo1.j1, equipo1.j2, equipo2.j1, equipo2.j2];
-    if (new Set(participantes).size !== 4) {
-      alert("Los 4 jugadores deben ser distintos");
-      return;
-    }
-
-    const setsJugados = sets.filter((s) => s.eq1 && s.eq2);
-    if (setsJugados.length < 2 || setsJugados.length > 3) {
-      alert("Debe haber 2 o 3 sets jugados");
-      return;
-    }
-
-    let setsEq1 = 0;
-    let setsEq2 = 0;
-
-    for (let i = 0; i < setsJugados.length; i++) {
-      const g1 = parseInt(setsJugados[i].eq1, 10);
-      const g2 = parseInt(setsJugados[i].eq2, 10);
-      const error = validarSet(g1, g2);
-      if (error) {
-        alert(`Set ${i + 1}: ${error}`);
-        return;
-      }
-      if (g1 > g2) setsEq1 += 1;
-      if (g2 > g1) setsEq2 += 1;
-    }
-
-    if (setsEq1 !== 2 && setsEq2 !== 2) {
-      alert("Un equipo debe ganar 2 sets");
-      return;
-    }
-
-    setLoading(true);
-
-    const gamesFavorEq1 = setsJugados.reduce((sum, s) => sum + parseInt(s.eq1, 10), 0);
-    const gamesContraEq1 = setsJugados.reduce((sum, s) => sum + parseInt(s.eq2, 10), 0);
-
-    const ganadores = setsEq1 === 2 ? [equipo1.j1, equipo1.j2] : [equipo2.j1, equipo2.j2];
-    const perdedores = setsEq1 === 2 ? [equipo2.j1, equipo2.j2] : [equipo1.j1, equipo1.j2];
-
-    const equipo1Ids = [equipo1.j1, equipo1.j2].map((nombre) => jugadores.find((j) => j.nombre === nombre)?.id ?? "");
-    const equipo2Ids = [equipo2.j1, equipo2.j2].map((nombre) => jugadores.find((j) => j.nombre === nombre)?.id ?? "");
-
-    const { error: errorPartido } = await supabase.from("partidos").insert([
-      {
-        equipo_1: [equipo1.j1, equipo1.j2],
-        equipo_2: [equipo2.j1, equipo2.j2],
-        equipo_1_ids: equipo1Ids.every(Boolean) ? equipo1Ids : null,
-        equipo_2_ids: equipo2Ids.every(Boolean) ? equipo2Ids : null,
-        sets_1: [setsEq1],
-        sets_2: [setsEq2],
-        tipo_partido: "martes",
-        fecha: new Date().toISOString(),
-      },
+  const loadData = async () => {
+    const [{ data: players }, { data: matchData }] = await Promise.all([
+      supabase.from("jugadores").select("id, nombre, slug").order("nombre", { ascending: true }),
+      supabase
+        .from("matches")
+        .select("id, played_at, type, status, winner_team, games_team1, games_team2, created_at, sessions(session_date), match_players(team, player_id, jugadores(id, nombre)), match_sets(set_no, games_team1, games_team2)")
+        .order("played_at", { ascending: false })
+        .limit(20),
     ]);
 
-    if (errorPartido) {
-      alert("Error al guardar el partido");
-      setLoading(false);
+    if (players) setJugadores(players as Jugador[]);
+    if (matchData) setMatches(matchData as unknown as MatchRow[]);
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  useEffect(() => {
+    setSets(type === "viernes" ? [emptySet(1)] : defaultTuesdaySets);
+  }, [type]);
+
+  const validationError = useMemo(() => {
+    const allPlayers = [...team1, ...team2];
+    if (allPlayers.some((id) => !id)) return "Seleccioná 4 jugadores";
+    if (new Set(allPlayers).size !== 4) return "Los 4 jugadores deben ser distintos";
+
+    if (type === "viernes" && sets.length !== 1) return "Viernes requiere exactamente 1 set";
+    if (type === "martes" && (sets.length < 2 || sets.length > 3)) return "Martes requiere 2 o 3 sets";
+
+    let t1 = 0;
+    let t2 = 0;
+    for (const set of sets) {
+      const a = Number(set.games_team1);
+      const b = Number(set.games_team2);
+      if (!Number.isInteger(a) || !Number.isInteger(b)) return `Completá el set ${set.set_no}`;
+      if (!validateSetScore(a, b)) return `Set inválido en set ${set.set_no}: ${a}-${b}`;
+      if (a > b) t1 += 1;
+      if (b > a) t2 += 1;
+    }
+
+    if (type === "viernes" && Math.max(t1, t2) !== 1) return "Viernes debe tener 1 set ganador";
+    if (type === "martes" && Math.max(t1, t2) !== 2) return "Martes debe tener 2 sets ganados";
+
+    return null;
+  }, [sets, team1, team2, type]);
+
+  const saveDraft = async () => {
+    if (validationError) {
+      alert(validationError);
       return;
-    }
-
-    for (const nombre of ganadores) {
-      const jugador = jugadores.find((j) => j.nombre === nombre);
-      if (!jugador) continue;
-      const { data: statsActuales } = await supabase
-        .from("jugadores")
-        .select("partidos_jugados, puntos, games_favor, games_contra")
-        .eq("id", jugador.id)
-        .single();
-
-      if (statsActuales) {
-        await supabase
-          .from("jugadores")
-          .update({
-            partidos_jugados: (statsActuales.partidos_jugados || 0) + 1,
-            puntos: (statsActuales.puntos || 0) + 3,
-            games_favor: (statsActuales.games_favor || 0) + (setsEq1 === 2 ? gamesFavorEq1 : gamesContraEq1),
-            games_contra: (statsActuales.games_contra || 0) + (setsEq1 === 2 ? gamesContraEq1 : gamesFavorEq1),
-          })
-          .eq("id", jugador.id);
-      }
-    }
-
-    for (const nombre of perdedores) {
-      const jugador = jugadores.find((j) => j.nombre === nombre);
-      if (!jugador) continue;
-      const { data: statsActuales } = await supabase
-        .from("jugadores")
-        .select("partidos_jugados, games_favor, games_contra")
-        .eq("id", jugador.id)
-        .single();
-
-      if (statsActuales) {
-        await supabase
-          .from("jugadores")
-          .update({
-            partidos_jugados: (statsActuales.partidos_jugados || 0) + 1,
-            games_favor: (statsActuales.games_favor || 0) + (setsEq1 === 2 ? gamesContraEq1 : gamesFavorEq1),
-            games_contra: (statsActuales.games_contra || 0) + (setsEq1 === 2 ? gamesFavorEq1 : gamesContraEq1),
-          })
-          .eq("id", jugador.id);
-      }
     }
 
     try {
-      await recomputeElo();
-    } catch (error) {
-      console.error(error);
-      alert("Se guardó el partido, pero no se pudo recalcular Elo");
-      setLoading(false);
-      return;
-    }
+      setLoading(true);
+      const sessionId = type === "viernes" ? await getOrCreateFridaySession(sessionDate) : null;
 
-    alert("¡Partido del martes registrado!");
-    window.location.href = "/";
+      const { data: match, error: matchError } = await supabase
+        .from("matches")
+        .insert({ type, session_id: sessionId, status: "draft", played_at: new Date().toISOString() })
+        .select("id")
+        .single();
+
+      if (matchError || !match) throw matchError ?? new Error("No se pudo crear match");
+
+      const playersPayload = [
+        { match_id: match.id, player_id: team1[0], team: 1 },
+        { match_id: match.id, player_id: team1[1], team: 1 },
+        { match_id: match.id, player_id: team2[0], team: 2 },
+        { match_id: match.id, player_id: team2[1], team: 2 },
+      ];
+
+      const setsPayload = sets.map((set) => ({
+        match_id: match.id,
+        set_no: set.set_no,
+        games_team1: Number(set.games_team1),
+        games_team2: Number(set.games_team2),
+      }));
+
+      const [{ error: playersError }, { error: setsError }] = await Promise.all([
+        supabase.from("match_players").insert(playersPayload),
+        supabase.from("match_sets").insert(setsPayload),
+      ]);
+
+      if (playersError || setsError) throw playersError ?? setsError;
+
+      alert("Draft guardado");
+      setTeam1(["", ""]);
+      setTeam2(["", ""]);
+      setSets(type === "viernes" ? [emptySet(1)] : defaultTuesdaySets);
+      await loadData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Error guardando draft");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!authorized) return <div className="min-h-screen bg-slate-950" />;
+  const finalizeMatch = async (matchId: string) => {
+    const { error } = await supabase.rpc("finalize_match", { p_match_id: matchId });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await loadData();
+  };
+
+  const deleteMatch = async (matchId: string) => {
+    const { error } = await supabase.rpc("delete_match", { p_match_id: matchId });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await loadData();
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center justify-center">
-      <Link href="/" className="fixed top-6 left-6 text-gray-500 hover:text-white transition-all flex items-center gap-2 text-sm font-mono uppercase tracking-widest z-50">
-        ← Volver
-      </Link>
+    <main className="min-h-screen bg-slate-950 text-white p-6">
+      <div className="max-w-5xl mx-auto space-y-8 py-10">
+        <Link href="/" className="text-gray-500 hover:text-white text-sm uppercase">← Volver</Link>
 
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-2xl bg-slate-900/80 border border-slate-800 p-8 rounded-[2rem] backdrop-blur-xl shadow-2xl">
-        <h1 className="text-3xl font-black mb-3 text-center tracking-tighter text-green-500">REPORTAR MARTES (BO3)</h1>
-        <p className="text-center text-sm text-gray-400 mb-8">
-          Para cargar una noche de viernes con múltiples sets, usá{' '}
-          <Link href="/viernes-cargar" className="text-green-400 hover:underline">Viernes – Cargar sets</Link>.
-        </p>
-
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <label className="text-xs font-bold text-gray-500 tracking-widest uppercase">Equipo 1</label>
-            <select onChange={(e) => setEquipo1({ ...equipo1, j1: e.target.value })} className="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl focus:outline-none focus:border-green-500 transition-all text-white">
-              <option value="">Jugador 1</option>
-              {jugadores.map((j) => <option key={j.id} value={j.nombre}>{j.nombre}</option>)}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <h1 className="text-2xl font-black text-green-400">Crear partido (draft)</h1>
+          <div className="grid md:grid-cols-2 gap-3">
+            <select value={type} onChange={(e) => setType(e.target.value as "martes" | "viernes")} className="bg-slate-800 p-3 rounded-xl">
+              <option value="martes">Martes (BO3)</option>
+              <option value="viernes">Viernes (BO1)</option>
             </select>
-            <select onChange={(e) => setEquipo1({ ...equipo1, j2: e.target.value })} className="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl focus:outline-none focus:border-green-500 transition-all text-white">
-              <option value="">Jugador 2</option>
-              {jugadores.map((j) => <option key={j.id} value={j.nombre}>{j.nombre}</option>)}
-            </select>
+            {type === "viernes" && (
+              <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="bg-slate-800 p-3 rounded-xl" />
+            )}
           </div>
 
-          <div className="text-center text-slate-700 font-black italic">VS</div>
-
-          <div className="space-y-3">
-            <label className="text-xs font-bold text-gray-500 tracking-widest uppercase">Equipo 2</label>
-            <select onChange={(e) => setEquipo2({ ...equipo2, j1: e.target.value })} className="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl focus:outline-none focus:border-green-500 transition-all text-white">
-              <option value="">Jugador 3</option>
-              {jugadores.map((j) => <option key={j.id} value={j.nombre}>{j.nombre}</option>)}
-            </select>
-            <select onChange={(e) => setEquipo2({ ...equipo2, j2: e.target.value })} className="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl focus:outline-none focus:border-green-500 transition-all text-white">
-              <option value="">Jugador 4</option>
-              {jugadores.map((j) => <option key={j.id} value={j.nombre}>{j.nombre}</option>)}
-            </select>
-          </div>
-
-          <div className="space-y-4 pt-4">
-            <label className="text-xs font-bold text-gray-500 tracking-widest uppercase">Resultados por Set</label>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-4">
-                <span className="text-sm text-gray-500 w-12">Set {i + 1}</span>
-                <input type="number" placeholder="Eq1" onChange={(e) => setSets((prev) => prev.map((set, idx) => idx === i ? { ...set, eq1: e.target.value } : set))} className="w-20 bg-slate-800 text-center text-xl font-black p-3 rounded-xl border border-slate-700 focus:border-green-500 outline-none text-white" />
-                <span className="text-xl font-bold text-slate-700">-</span>
-                <input type="number" placeholder="Eq2" onChange={(e) => setSets((prev) => prev.map((set, idx) => idx === i ? { ...set, eq2: e.target.value } : set))} className="w-20 bg-slate-800 text-center text-xl font-black p-3 rounded-xl border border-slate-700 focus:border-green-500 outline-none text-white" />
-                {i === 2 && <span className="text-xs text-gray-600">(opcional)</span>}
+          <div className="grid md:grid-cols-2 gap-4">
+            {[1, 2].map((team) => (
+              <div key={team} className="space-y-2">
+                <p className="text-sm text-slate-400">Equipo {team}</p>
+                {[0, 1].map((slot) => (
+                  <select
+                    key={`${team}-${slot}`}
+                    value={team === 1 ? team1[slot] : team2[slot]}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (team === 1) {
+                        const next = [...team1];
+                        next[slot] = val;
+                        setTeam1(next);
+                      } else {
+                        const next = [...team2];
+                        next[slot] = val;
+                        setTeam2(next);
+                      }
+                    }}
+                    className="w-full bg-slate-800 p-3 rounded-xl"
+                  >
+                    <option value="">Jugador</option>
+                    {jugadores.map((j) => (
+                      <option key={`${team}-${slot}-${j.id}`} value={j.id}>{j.nombre}</option>
+                    ))}
+                  </select>
+                ))}
               </div>
             ))}
           </div>
 
-          <button onClick={handleGuardarMartes} disabled={loading} className="w-full bg-green-500 text-black font-black py-5 rounded-2xl hover:bg-green-400 transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)] disabled:opacity-50 uppercase tracking-widest">
-            {loading ? "GUARDANDO..." : "CONFIRMAR MARTES"}
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">Sets</p>
+            {sets.map((set, index) => (
+              <div key={set.set_no} className="flex items-center gap-2">
+                <span className="w-16 text-xs text-slate-500">Set {set.set_no}</span>
+                <input type="number" min={0} max={7} value={set.games_team1} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team1: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                <span>-</span>
+                <input type="number" min={0} max={7} value={set.games_team2} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team2: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                {type === "martes" && index === sets.length - 1 && sets.length === 3 && (
+                  <button className="text-xs text-red-400" onClick={() => setSets((prev) => prev.slice(0, 2))}>Quitar 3er set</button>
+                )}
+              </div>
+            ))}
+            {type === "martes" && sets.length < 3 && (
+              <button onClick={() => setSets((prev) => [...prev, emptySet(3)])} className="text-xs text-green-400">+ Agregar tercer set</button>
+            )}
+          </div>
+
+          {validationError && <p className="text-amber-300 text-sm">⚠ {validationError}</p>}
+          <button onClick={saveDraft} disabled={loading} className="bg-green-500 text-black px-5 py-3 rounded-xl font-bold disabled:opacity-60">
+            {loading ? "Guardando..." : "Guardar draft"}
           </button>
-        </div>
-      </motion.div>
+        </section>
+
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-xl font-bold mb-4">Partidos recientes</h2>
+          <div className="space-y-3">
+            {matches.map((match) => {
+              const team1 = (match.match_players ?? []).filter((p) => p.team === 1).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
+              const team2 = (match.match_players ?? []).filter((p) => p.team === 2).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
+              const setSummary = (match.match_sets ?? [])
+                .sort((a, b) => a.set_no - b.set_no)
+                .map((s) => `${s.games_team1}-${s.games_team2}`)
+                .join(" | ");
+
+              return (
+                <div key={match.id} className="border border-slate-700 rounded-xl p-4">
+                  <p className="text-xs text-slate-500">{new Date(match.played_at).toLocaleString("es-AR")} · {match.type} · {match.status}</p>
+                  <p className="font-semibold">{team1} vs {team2}</p>
+                  <p className="text-sm text-slate-400">Sets: {setSummary || "-"}</p>
+                  <p className="text-sm text-slate-400">Ganador: {match.winner_team ? `Equipo ${match.winner_team}` : "-"} · Games: {match.games_team1 ?? "-"}-{match.games_team2 ?? "-"}</p>
+                  <div className="mt-3 flex gap-2">
+                    {match.status === "draft" && <button className="px-3 py-1 bg-blue-600 rounded-lg text-xs" onClick={() => finalizeMatch(match.id)}>Finalizar</button>}
+                    {match.status === "final" && <button className="px-3 py-1 bg-red-600 rounded-lg text-xs" onClick={() => deleteMatch(match.id)}>Borrar</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

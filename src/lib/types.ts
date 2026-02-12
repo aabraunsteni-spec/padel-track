@@ -23,17 +23,29 @@ export type Jugador = {
   resistencia?: number | null;
 };
 
-export type Partido = {
+export type MatchSet = {
+  set_no: number;
+  games_team1: number;
+  games_team2: number;
+};
+
+export type MatchPlayer = {
+  team: 1 | 2;
+  player_id: string;
+  jugadores?: Pick<Jugador, 'id' | 'nombre'> | null;
+};
+
+export type MatchRow = {
   id: string;
-  fecha: string;
-  tipo_partido?: TipoPartido | null;
-  equipo_1: string[];
-  equipo_2: string[];
-  equipo_1_ids?: string[] | null;
-  equipo_2_ids?: string[] | null;
-  sets_1: number[];
-  sets_2: number[];
-  games_1?: number | null;
-  games_2?: number | null;
-  grupo_viernes?: string | null;
+  played_at: string;
+  type: TipoPartido;
+  session_id: string | null;
+  status: 'draft' | 'final';
+  winner_team: 1 | 2 | null;
+  games_team1: number | null;
+  games_team2: number | null;
+  created_at: string;
+  sessions?: { session_date: string } | null;
+  match_players?: MatchPlayer[];
+  match_sets?: MatchSet[];
 };
