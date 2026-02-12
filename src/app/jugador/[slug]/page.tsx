@@ -24,23 +24,31 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
         .eq('slug', slug)
         .single();
 
+      const { data: stats } = await supabase.from('player_stats').select('*');
+
       if (data) {
-        setJugador(data);
+        const stat = (stats ?? []).find((row) => row.player_id === data.id);
+        setJugador({
+          ...data,
+          partidos_jugados: stat?.matches_played ?? 0,
+          partidos_ganados: stat?.matches_won ?? 0,
+          games_favor: stat?.games_favor ?? 0,
+          games_contra: stat?.games_contra ?? 0,
+        });
 
         const { data: todos } = await supabase
           .from('jugadores')
-          .select('nombre, elo_rating, games_favor')
-          .order('elo_rating', { ascending: false })
-          .order('games_favor', { ascending: false });
+          .select('id,nombre, elo_rating')
+          .order('elo_rating', { ascending: false });
 
         if (todos) {
-          const index = todos.findIndex(j => j.nombre === data.nombre);
+          const index = todos.findIndex(j => j.id === data.id);
           setRankingPos(index !== -1 ? index + 1 : null);
         }
       }
       setLoading(false);
     };
-    fetchDatosYRanking();
+    void fetchDatosYRanking();
   }, [slug]);
 
   if (loading) return (
