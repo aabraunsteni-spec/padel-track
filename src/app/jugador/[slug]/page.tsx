@@ -6,7 +6,27 @@ import { RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, Radar as Ra
 import { motion } from "framer-motion";
 import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
-import type { Jugador } from "@/lib/types";
+import type { Jugador, MatchRow, MatchPlayer } from "@/lib/types";
+
+type MatchPlayerWithJugadorRelation = Omit<MatchPlayer, 'jugadores'> & {
+  jugadores?: Pick<Jugador, 'id' | 'nombre'> | Array<Pick<Jugador, 'id' | 'nombre'>> | null;
+};
+
+type MatchWithRelations = Pick<MatchRow, 'id' | 'played_at' | 'created_at' | 'winner_team' | 'games_team1' | 'games_team2'> & {
+  sessions?: Array<{ session_date: string }> | null;
+  match_players?: MatchPlayerWithJugadorRelation[];
+  match_sets?: Array<{ set_no: number; games_team1: number; games_team2: number }>;
+};
+
+type MatchSummary = {
+  id: string;
+  fecha: string;
+  resultado: 'W' | 'L' | '—';
+  partner: string;
+  rivales: string[];
+  score: string;
+  sortDate: string;
+};
 
 export default function PerfilJugador({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = React.use(params);
@@ -14,6 +34,7 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
 
   const [jugador, setJugador] = useState<Jugador | null>(null);
   const [rankingPos, setRankingPos] = useState<number | null>(null);
+  const [ultimosMatches, setUltimosMatches] = useState<MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -45,6 +66,80 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
           const index = todos.findIndex(j => j.id === data.id);
           setRankingPos(index !== -1 ? index + 1 : null);
         }
+
+        const { data: matches } = await supabase
+          .from('matches')
+          .select('id, played_at, created_at, winner_team, games_team1, games_team2, sessions(session_date), match_players(team, player_id, jugadores(id, nombre)), match_sets(set_no, games_team1, games_team2)')
+          .eq('status', 'final')
+          .eq('match_players.player_id', data.id)
+          .order('played_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        const resumen: MatchSummary[] = (matches ?? []).map((match: MatchWithRelations) => {
+          const players = match.match_players ?? [];
+          const getJugadorNombre = (mp: MatchPlayerWithJugadorRelation) => Array.isArray(mp.jugadores)
+            ? mp.jugadores[0]?.nombre
+            : mp.jugadores?.nombre;
+          const playerMatch = players.find((mp) => mp.player_id === data.id);
+          const playerTeam = playerMatch?.team;
+          let resultado: MatchSummary['resultado'] = '—';
+
+          if (!playerTeam || !match.winner_team) {
+            console.warn(`[perfil-jugador] No se pudo resolver resultado para match ${match.id}`, {
+              playerId: data.id,
+              playerTeam,
+              winnerTeam: match.winner_team,
+            });
+          } else {
+            resultado = match.winner_team === playerTeam ? 'W' : 'L';
+          }
+
+          const partnerPlayer = playerTeam
+            ? players.find((mp) => mp.team === playerTeam && mp.player_id !== data.id)
+            : undefined;
+
+          const partner = partnerPlayer
+            ? getJugadorNombre(partnerPlayer) ?? '—'
+            : '—';
+
+          const rivales = playerTeam
+            ? players
+              .filter((mp) => mp.team !== playerTeam)
+              .map((mp) => getJugadorNombre(mp))
+              .filter((nombre): nombre is string => Boolean(nombre))
+            : [];
+
+          const scoreSets = (match.match_sets ?? [])
+            .sort((a, b) => a.set_no - b.set_no)
+            .map((set) => {
+              if (playerTeam === 2) return `${set.games_team2}-${set.games_team1}`;
+              return `${set.games_team1}-${set.games_team2}`;
+            })
+            .join(' | ');
+
+          const scoreGames = match.games_team1 !== null && match.games_team2 !== null
+            ? (playerTeam === 2 ? `${match.games_team2}-${match.games_team1}` : `${match.games_team1}-${match.games_team2}`)
+            : '';
+
+          const fechaRaw = match.played_at || match.sessions?.[0]?.session_date || match.created_at;
+
+          return {
+            id: match.id,
+            fecha: new Date(fechaRaw).toLocaleDateString('es-AR', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }),
+            resultado,
+            partner,
+            rivales,
+            score: scoreSets || scoreGames || '—',
+            sortDate: new Date(fechaRaw).toISOString(),
+          };
+        });
+
+        setUltimosMatches(resumen.sort((a, b) => b.sortDate.localeCompare(a.sortDate)));
       }
       setLoading(false);
     };
@@ -78,6 +173,9 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
     : 0;
 
   const difGames = (jugador.games_favor || 0) - (jugador.games_contra || 0);
+  const formaUltimos5 = ultimosMatches.slice(0, 5);
+  const winsUltimos5 = formaUltimos5.filter((match) => match.resultado === 'W').length;
+  const ratioUltimos5 = formaUltimos5.length > 0 ? `${winsUltimos5}/${formaUltimos5.length}` : '—';
 
   return (
     <main className="min-h-screen bg-[#020617] text-white selection:bg-[#bef264]/30 font-sans">
@@ -153,7 +251,6 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
         >
           {[
             { label: 'Elo', value: Math.round(jugador.elo_rating || 1500), highlight: true },
-            { label: 'Puntos (legacy)', value: jugador.puntos || 0, highlight: false },
             { label: 'Partidos Jugados', value: jugador.partidos_jugados || 0, highlight: false },
             { label: 'Win Rate', value: `${winRate}%`, highlight: false },
             { label: 'Dif. Games', value: difGames > 0 ? `+${difGames}` : difGames, highlight: false, color: difGames > 0 ? 'text-[#bef264]' : 'text-red-400' },
@@ -172,6 +269,58 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
               </p>
             </div>
           ))}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="bg-white/[0.02] backdrop-blur-md border border-white/10 p-6 md:p-8 rounded-3xl mb-8"
+        >
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Últimos partidos</h2>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-gray-400 uppercase tracking-wider text-xs">Forma últimos 5</span>
+              <div className="flex gap-2">
+                {formaUltimos5.length > 0 ? formaUltimos5.map((match) => (
+                  <span
+                    key={`forma-${match.id}`}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black ${
+                      match.resultado === 'W'
+                        ? 'bg-[#bef264]/20 text-[#bef264] border border-[#bef264]/30'
+                        : match.resultado === 'L'
+                          ? 'bg-red-500/10 text-red-300 border border-red-500/20'
+                          : 'bg-white/[0.03] text-gray-400 border border-white/10'
+                    }`}
+                  >
+                    {match.resultado}
+                  </span>
+                )) : <span className="text-gray-500">—</span>}
+              </div>
+              <span className="text-sm font-bold text-white">{ratioUltimos5}</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {ultimosMatches.length > 0 ? ultimosMatches.map((match) => (
+              <div key={match.id} className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">{match.fecha}</p>
+                  <p className="text-sm text-gray-300">
+                    <span className="text-gray-500">Partner:</span> {match.partner} <span className="text-gray-500">· Rivales:</span> {match.rivales.join(' / ') || '—'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded-xl text-xs font-black ${match.resultado === 'W' ? 'bg-[#bef264]/20 text-[#bef264]' : match.resultado === 'L' ? 'bg-red-500/10 text-red-300' : 'bg-white/[0.04] text-gray-400'}`}>
+                    {match.resultado}
+                  </span>
+                  <span className="text-sm font-bold text-white">{match.score}</span>
+                </div>
+              </div>
+            )) : (
+              <p className="text-sm text-gray-500">Sin partidos finalizados todavía.</p>
+            )}
+          </div>
         </motion.div>
 
         {/* Radar + Info */}
