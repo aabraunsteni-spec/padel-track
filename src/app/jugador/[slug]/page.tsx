@@ -8,9 +8,13 @@ import NavBar from "@/app/components/NavBar";
 import FloatingButton from "@/app/components/FloatingButton";
 import type { Jugador, MatchRow, MatchPlayer } from "@/lib/types";
 
+type MatchPlayerWithJugadorRelation = Omit<MatchPlayer, 'jugadores'> & {
+  jugadores?: Pick<Jugador, 'id' | 'nombre'> | Array<Pick<Jugador, 'id' | 'nombre'>> | null;
+};
+
 type MatchWithRelations = Pick<MatchRow, 'id' | 'played_at' | 'created_at' | 'winner_team' | 'games_team1' | 'games_team2'> & {
-  sessions?: { session_date: string } | null;
-  match_players?: MatchPlayer[];
+  sessions?: Array<{ session_date: string }> | null;
+  match_players?: MatchPlayerWithJugadorRelation[];
   match_sets?: Array<{ set_no: number; games_team1: number; games_team2: number }>;
 };
 
@@ -74,6 +78,9 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
 
         const resumen: MatchSummary[] = (matches ?? []).map((match: MatchWithRelations) => {
           const players = match.match_players ?? [];
+          const getJugadorNombre = (mp: MatchPlayerWithJugadorRelation) => Array.isArray(mp.jugadores)
+            ? mp.jugadores[0]?.nombre
+            : mp.jugadores?.nombre;
           const playerMatch = players.find((mp) => mp.player_id === data.id);
           const playerTeam = playerMatch?.team;
           let resultado: MatchSummary['resultado'] = '—';
@@ -88,14 +95,18 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
             resultado = match.winner_team === playerTeam ? 'W' : 'L';
           }
 
-          const partner = playerTeam
-            ? players.find((mp) => mp.team === playerTeam && mp.player_id !== data.id)?.jugadores?.nombre ?? '—'
+          const partnerPlayer = playerTeam
+            ? players.find((mp) => mp.team === playerTeam && mp.player_id !== data.id)
+            : undefined;
+
+          const partner = partnerPlayer
+            ? getJugadorNombre(partnerPlayer) ?? '—'
             : '—';
 
           const rivales = playerTeam
             ? players
               .filter((mp) => mp.team !== playerTeam)
-              .map((mp) => mp.jugadores?.nombre)
+              .map((mp) => getJugadorNombre(mp))
               .filter((nombre): nombre is string => Boolean(nombre))
             : [];
 
@@ -111,7 +122,7 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
             ? (playerTeam === 2 ? `${match.games_team2}-${match.games_team1}` : `${match.games_team1}-${match.games_team2}`)
             : '';
 
-          const fechaRaw = match.played_at || match.sessions?.session_date || match.created_at;
+          const fechaRaw = match.played_at || match.sessions?.[0]?.session_date || match.created_at;
 
           return {
             id: match.id,
