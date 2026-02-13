@@ -35,7 +35,8 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
   const [jugador, setJugador] = useState<Jugador | null>(null);
   const [rankingPos, setRankingPos] = useState<number | null>(null);
   const [ultimosMatches, setUltimosMatches] = useState<MatchSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingPerfil, setLoadingPerfil] = useState(true);
+  const [loadingMatches, setLoadingMatches] = useState(true);
 
   useEffect(() => {
     const fetchDatosYRanking = async () => {
@@ -45,18 +46,29 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
         .eq('slug', slug)
         .single();
 
-      const { data: stats } = await supabase.from('player_stats').select('*');
+      if (!data) {
+        setLoadingPerfil(false);
+        setLoadingMatches(false);
+        return;
+      }
 
-      if (data) {
-        const stat = (stats ?? []).find((row) => row.player_id === data.id);
-        setJugador({
-          ...data,
-          partidos_jugados: stat?.matches_played ?? 0,
-          partidos_ganados: stat?.matches_won ?? 0,
-          games_favor: stat?.games_favor ?? 0,
-          games_contra: stat?.games_contra ?? 0,
-        });
+      const { data: stat } = await supabase
+        .from('player_stats')
+        .select('*')
+        .eq('player_id', data.id)
+        .single();
 
+      setJugador({
+        ...data,
+        partidos_jugados: stat?.matches_played ?? 0,
+        partidos_ganados: stat?.matches_won ?? 0,
+        games_favor: stat?.games_favor ?? 0,
+        games_contra: stat?.games_contra ?? 0,
+      });
+
+      setLoadingPerfil(false);
+
+      void (async () => {
         const { data: todos } = await supabase
           .from('jugadores')
           .select('id,nombre, elo_rating')
@@ -66,7 +78,9 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
           const index = todos.findIndex(j => j.id === data.id);
           setRankingPos(index !== -1 ? index + 1 : null);
         }
+      })();
 
+      try {
         const { data: matches } = await supabase
           .from('matches')
           .select('id, played_at, created_at, winner_team, games_team1, games_team2, sessions(session_date), match_players(team, player_id, jugadores(id, nombre)), match_sets(set_no, games_team1, games_team2)')
@@ -140,15 +154,16 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
         });
 
         setUltimosMatches(resumen.sort((a, b) => b.sortDate.localeCompare(a.sortDate)));
+      } finally {
+        setLoadingMatches(false);
       }
-      setLoading(false);
     };
     void fetchDatosYRanking();
   }, [slug]);
 
-  if (loading) return (
+  if (loadingPerfil) return (
     <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center font-mono tracking-widest">
-      Calculando posición...
+      Cargando perfil...
     </div>
   );
 
@@ -212,7 +227,7 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
               </div>
             )}
             <div className="absolute -bottom-4 -right-4 bg-[#bef264] text-black px-5 py-2 rounded-2xl font-black text-2xl italic shadow-2xl">
-              #{rankingPos}
+              #{rankingPos ?? '—'}
             </div>
           </div>
 
@@ -302,7 +317,17 @@ export default function PerfilJugador({ params }: { params: Promise<{ slug: stri
           </div>
 
           <div className="space-y-3">
-            {ultimosMatches.length > 0 ? ultimosMatches.map((match) => (
+            {loadingMatches ? (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">Cargando últimos partidos...</p>
+                {[1, 2, 3].map((item) => (
+                  <div key={`match-placeholder-${item}`} className="bg-white/[0.02] border border-white/10 rounded-2xl p-4">
+                    <div className="h-3 w-24 rounded bg-white/10 mb-3" />
+                    <div className="h-3 w-48 rounded bg-white/10" />
+                  </div>
+                ))}
+              </div>
+            ) : ultimosMatches.length > 0 ? ultimosMatches.map((match) => (
               <div key={match.id} className="bg-white/[0.02] border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-xs text-gray-500 uppercase tracking-wider">{match.fecha}</p>
