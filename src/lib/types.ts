@@ -1,4 +1,5 @@
 export type TipoPartido = 'martes' | 'viernes';
+export type MatchFormat = 'bo3_6tb' | 'bo1_6tb' | 'bo1_4';
 
 export type Jugador = {
   id: string;
@@ -39,6 +40,7 @@ export type MatchRow = {
   id: string;
   played_at: string;
   type: TipoPartido;
+  format: MatchFormat;
   session_id: string | null;
   status: 'draft' | 'final';
   winner_team: 1 | 2 | null;

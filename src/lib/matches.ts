@@ -1,6 +1,14 @@
 import { supabase } from "@/lib/supabase";
+import type { MatchFormat } from "@/lib/types";
 
-export const validateSetScore = (a: number, b: number) => {
+export const validateSetScore = (a: number, b: number, format: MatchFormat) => {
+  if (format === "bo1_4") {
+    return (
+      (a === 4 && b >= 0 && b <= 3) ||
+      (b === 4 && a >= 0 && a <= 3)
+    );
+  }
+
   return (
     (a === 6 && b >= 0 && b <= 4) ||
     (b === 6 && a >= 0 && a <= 4) ||

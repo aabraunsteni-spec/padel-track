@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import type { Jugador, MatchRow } from "@/lib/types";
+import type { Jugador, MatchFormat, MatchRow } from "@/lib/types";
 import { getOrCreateFridaySession, validateSetScore } from "@/lib/matches";
 
 type SetForm = { set_no: number; games_team1: string; games_team2: string };
@@ -11,6 +11,11 @@ type SetForm = { set_no: number; games_team1: string; games_team2: string };
 const emptySet = (setNo: number): SetForm => ({ set_no: setNo, games_team1: "", games_team2: "" });
 
 const defaultTuesdaySets = [emptySet(1), emptySet(2)];
+
+const getSafeFormat = (type: "martes" | "viernes", format: MatchFormat): MatchFormat =>
+  type === "viernes"
+    ? (format === "bo1_4" ? "bo1_4" : "bo1_6tb")
+    : "bo3_6tb";
 
 export default function CargarPartidoPage() {
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
@@ -20,6 +25,7 @@ export default function CargarPartidoPage() {
   const [team1, setTeam1] = useState<string[]>(["", ""]);
   const [team2, setTeam2] = useState<string[]>(["", ""]);
   const [sets, setSets] = useState<SetForm[]>(defaultTuesdaySets);
+  const [format, setFormat] = useState<MatchFormat>("bo3_6tb");
   const [loading, setLoading] = useState(false);
 
   const loadData = async () => {
@@ -27,7 +33,7 @@ export default function CargarPartidoPage() {
       supabase.from("jugadores").select("id, nombre, slug").order("nombre", { ascending: true }),
       supabase
         .from("matches")
-        .select("id, played_at, type, status, winner_team, games_team1, games_team2, created_at, sessions(session_date), match_players(team, player_id, jugadores(id, nombre)), match_sets(set_no, games_team1, games_team2)")
+        .select("id, played_at, type, format, status, winner_team, games_team1, games_team2, created_at, sessions(session_date), match_players(team, player_id, jugadores(id, nombre)), match_sets(set_no, games_team1, games_team2)")
         .order("played_at", { ascending: false })
         .limit(20),
     ]);
@@ -41,7 +47,14 @@ export default function CargarPartidoPage() {
   }, []);
 
   useEffect(() => {
-    setSets(type === "viernes" ? [emptySet(1)] : defaultTuesdaySets);
+    if (type === "viernes") {
+      setFormat("bo1_6tb");
+      setSets([emptySet(1)]);
+      return;
+    }
+
+    setFormat("bo3_6tb");
+    setSets(defaultTuesdaySets);
   }, [type]);
 
   const validationError = useMemo(() => {
@@ -52,13 +65,15 @@ export default function CargarPartidoPage() {
     if (type === "viernes" && sets.length !== 1) return "Viernes requiere exactamente 1 set";
     if (type === "martes" && (sets.length < 2 || sets.length > 3)) return "Martes requiere 2 o 3 sets";
 
+    const safeFormat = getSafeFormat(type, format);
+
     let t1 = 0;
     let t2 = 0;
     for (const set of sets) {
       const a = Number(set.games_team1);
       const b = Number(set.games_team2);
       if (!Number.isInteger(a) || !Number.isInteger(b)) return `Completá el set ${set.set_no}`;
-      if (!validateSetScore(a, b)) return `Set inválido en set ${set.set_no}: ${a}-${b}`;
+      if (!validateSetScore(a, b, safeFormat)) return `Set inválido en set ${set.set_no}: ${a}-${b}`;
       if (a > b) t1 += 1;
       if (b > a) t2 += 1;
     }
@@ -67,7 +82,7 @@ export default function CargarPartidoPage() {
     if (type === "martes" && Math.max(t1, t2) !== 2) return "Martes debe tener 2 sets ganados";
 
     return null;
-  }, [sets, team1, team2, type]);
+  }, [format, sets, team1, team2, type]);
 
   const saveDraft = async () => {
     if (validationError) {
@@ -78,10 +93,11 @@ export default function CargarPartidoPage() {
     try {
       setLoading(true);
       const sessionId = type === "viernes" ? await getOrCreateFridaySession(sessionDate) : null;
+      const safeFormat = getSafeFormat(type, format);
 
       const { data: match, error: matchError } = await supabase
         .from("matches")
-        .insert({ type, session_id: sessionId, status: "draft", played_at: new Date().toISOString() })
+        .insert({ type, format: safeFormat, session_id: sessionId, status: "draft", played_at: new Date().toISOString() })
         .select("id")
         .single();
 
@@ -151,7 +167,17 @@ export default function CargarPartidoPage() {
               <option value="viernes">Viernes (BO1)</option>
             </select>
             {type === "viernes" && (
-              <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="bg-slate-800 p-3 rounded-xl" />
+              <>
+                <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="bg-slate-800 p-3 rounded-xl" />
+                <select
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as "bo1_6tb" | "bo1_4")}
+                  className="bg-slate-800 p-3 rounded-xl md:col-span-2"
+                >
+                  <option value="bo1_6tb">1 set a 6 (TB 7)</option>
+                  <option value="bo1_4">Partido a 4 games</option>
+                </select>
+              </>
             )}
           </div>
 
@@ -192,9 +218,9 @@ export default function CargarPartidoPage() {
             {sets.map((set, index) => (
               <div key={set.set_no} className="flex items-center gap-2">
                 <span className="w-16 text-xs text-slate-500">Set {set.set_no}</span>
-                <input type="number" min={0} max={7} value={set.games_team1} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team1: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team1} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team1: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
                 <span>-</span>
-                <input type="number" min={0} max={7} value={set.games_team2} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team2: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team2} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team2: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
                 {type === "martes" && index === sets.length - 1 && sets.length === 3 && (
                   <button className="text-xs text-red-400" onClick={() => setSets((prev) => prev.slice(0, 2))}>Quitar 3er set</button>
                 )}
@@ -224,7 +250,7 @@ export default function CargarPartidoPage() {
 
               return (
                 <div key={match.id} className="border border-slate-700 rounded-xl p-4">
-                  <p className="text-xs text-slate-500">{new Date(match.played_at).toLocaleString("es-AR")} · {match.type} · {match.status}</p>
+                  <p className="text-xs text-slate-500">{new Date(match.played_at).toLocaleString("es-AR")} · {match.type} · {match.format} · {match.status}</p>
                   <p className="font-semibold">{team1} vs {team2}</p>
                   <p className="text-sm text-slate-400">Sets: {setSummary || "-"}</p>
                   <p className="text-sm text-slate-400">Ganador: {match.winner_team ? `Equipo ${match.winner_team}` : "-"} · Games: {match.games_team1 ?? "-"}-{match.games_team2 ?? "-"}</p>
