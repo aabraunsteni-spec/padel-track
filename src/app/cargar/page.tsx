@@ -17,6 +17,24 @@ const getSafeFormat = (type: "martes" | "viernes", format: MatchFormat): MatchFo
     ? (format === "bo1_4" ? "bo1_4" : "bo1_6tb")
     : "bo3_6tb";
 
+const inferFridayFormatFromSet = (set: SetForm): MatchFormat | null => {
+  const a = Number(set.games_team1);
+  const b = Number(set.games_team2);
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
+
+  if (validateSetScore(a, b, "bo1_4")) return "bo1_4";
+  if (validateSetScore(a, b, "bo1_6tb")) return "bo1_6tb";
+  return null;
+};
+
+const getDraftFormat = (type: "martes" | "viernes", format: MatchFormat, sets: SetForm[]): MatchFormat => {
+  const safeFormat = getSafeFormat(type, format);
+  if (type !== "viernes" || safeFormat === "bo1_4") return safeFormat;
+
+  const inferred = sets.length === 1 ? inferFridayFormatFromSet(sets[0]) : null;
+  return inferred === "bo1_4" ? "bo1_4" : safeFormat;
+};
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
 
@@ -76,7 +94,7 @@ export default function CargarPartidoPage() {
     if (type === "viernes" && sets.length !== 1) return "Viernes requiere exactamente 1 set";
     if (type === "martes" && (sets.length < 2 || sets.length > 3)) return "Martes requiere 2 o 3 sets";
 
-    const safeFormat = getSafeFormat(type, format);
+    const safeFormat = getDraftFormat(type, format, sets);
 
     let t1 = 0;
     let t2 = 0;
@@ -84,12 +102,7 @@ export default function CargarPartidoPage() {
       const a = Number(set.games_team1);
       const b = Number(set.games_team2);
       if (!Number.isInteger(a) || !Number.isInteger(b)) return `Completá el set ${set.set_no}`;
-      if (!validateSetScore(a, b, safeFormat)) {
-        if (type === "viernes" && safeFormat === "bo1_6tb" && validateSetScore(a, b, "bo1_4")) {
-          return `Set inválido en set ${set.set_no}: ${a}-${b}. Si es partido a 4 games, cambiá el formato a "Partido a 4 games"`;
-        }
-        return `Set inválido en set ${set.set_no}: ${a}-${b}`;
-      }
+      if (!validateSetScore(a, b, safeFormat)) return `Set inválido en set ${set.set_no}: ${a}-${b}`;
       if (a > b) t1 += 1;
       if (b > a) t2 += 1;
     }
@@ -109,7 +122,7 @@ export default function CargarPartidoPage() {
     try {
       setLoading(true);
       const sessionId = type === "viernes" ? await getOrCreateFridaySession(sessionDate) : null;
-      const safeFormat = getSafeFormat(type, format);
+      const safeFormat = getDraftFormat(type, format, sets);
 
       const { data: match, error: matchError } = await supabase
         .from("matches")
