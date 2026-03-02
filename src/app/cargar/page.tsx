@@ -12,28 +12,24 @@ const emptySet = (setNo: number): SetForm => ({ set_no: setNo, games_team1: "", 
 
 const defaultTuesdaySets = [emptySet(1), emptySet(2)];
 
-const getSafeFormat = (type: "martes" | "viernes", format: MatchFormat): MatchFormat =>
-  type === "viernes"
-    ? (format === "bo1_4" ? "bo1_4" : "bo1_6tb")
-    : "bo3_6tb";
-
 const getFridayFormatFromSet = (set: SetForm): MatchFormat | null => {
   const a = Number(set.games_team1);
   const b = Number(set.games_team2);
   if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
 
-  if ((a === 4 && b >= 0 && b <= 3) || (b === 4 && a >= 0 && a <= 3)) return "bo1_4";
+  if (validateSetScore(a, b, "bo1_4")) return "bo1_4";
   if (validateSetScore(a, b, "bo1_6tb")) return "bo1_6tb";
   return null;
 };
 
-const getDraftFormat = (type: "martes" | "viernes", format: MatchFormat, sets: SetForm[]): MatchFormat => {
-  if (type !== "viernes") return "bo3_6tb";
+const getDraftFormat = (type: "martes" | "viernes", format: MatchFormat, sets: SetForm[]): MatchFormat | null => {
+  if (type === "martes") return "bo3_6tb";
 
   const fromSet = sets.length === 1 ? getFridayFormatFromSet(sets[0]) : null;
   if (fromSet) return fromSet;
 
-  return getSafeFormat(type, format);
+  if (format === "bo1_4" || format === "bo1_6tb") return format;
+  return null;
 };
 
 const getErrorMessage = (error: unknown): string => {
@@ -96,6 +92,7 @@ export default function CargarPartidoPage() {
     if (type === "martes" && (sets.length < 2 || sets.length > 3)) return "Martes requiere 2 o 3 sets";
 
     const safeFormat = getDraftFormat(type, format, sets);
+    if (!safeFormat) return "Formato de viernes inválido";
 
     let t1 = 0;
     let t2 = 0;
@@ -124,6 +121,7 @@ export default function CargarPartidoPage() {
       setLoading(true);
       const sessionId = type === "viernes" ? await getOrCreateFridaySession(sessionDate) : null;
       const safeFormat = getDraftFormat(type, format, sets);
+    if (!safeFormat) return "Formato de viernes inválido";
 
       const { data: match, error: matchError } = await supabase
         .from("matches")
