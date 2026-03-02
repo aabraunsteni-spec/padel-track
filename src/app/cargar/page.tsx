@@ -17,22 +17,23 @@ const getSafeFormat = (type: "martes" | "viernes", format: MatchFormat): MatchFo
     ? (format === "bo1_4" ? "bo1_4" : "bo1_6tb")
     : "bo3_6tb";
 
-const inferFridayFormatFromSet = (set: SetForm): MatchFormat | null => {
+const getFridayFormatFromSet = (set: SetForm): MatchFormat | null => {
   const a = Number(set.games_team1);
   const b = Number(set.games_team2);
   if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
 
-  if (validateSetScore(a, b, "bo1_4")) return "bo1_4";
+  if ((a === 4 && b >= 0 && b <= 3) || (b === 4 && a >= 0 && a <= 3)) return "bo1_4";
   if (validateSetScore(a, b, "bo1_6tb")) return "bo1_6tb";
   return null;
 };
 
 const getDraftFormat = (type: "martes" | "viernes", format: MatchFormat, sets: SetForm[]): MatchFormat => {
-  const safeFormat = getSafeFormat(type, format);
-  if (type !== "viernes" || safeFormat === "bo1_4") return safeFormat;
+  if (type !== "viernes") return "bo3_6tb";
 
-  const inferred = sets.length === 1 ? inferFridayFormatFromSet(sets[0]) : null;
-  return inferred === "bo1_4" ? "bo1_4" : safeFormat;
+  const fromSet = sets.length === 1 ? getFridayFormatFromSet(sets[0]) : null;
+  if (fromSet) return fromSet;
+
+  return getSafeFormat(type, format);
 };
 
 const getErrorMessage = (error: unknown): string => {
