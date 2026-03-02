@@ -84,7 +84,12 @@ export default function CargarPartidoPage() {
       const a = Number(set.games_team1);
       const b = Number(set.games_team2);
       if (!Number.isInteger(a) || !Number.isInteger(b)) return `Completá el set ${set.set_no}`;
-      if (!validateSetScore(a, b, safeFormat)) return `Set inválido en set ${set.set_no}: ${a}-${b}`;
+      if (!validateSetScore(a, b, safeFormat)) {
+        if (type === "viernes" && safeFormat === "bo1_6tb" && validateSetScore(a, b, "bo1_4")) {
+          return `Set inválido en set ${set.set_no}: ${a}-${b}. Si es partido a 4 games, cambiá el formato a "Partido a 4 games"`;
+        }
+        return `Set inválido en set ${set.set_no}: ${a}-${b}`;
+      }
       if (a > b) t1 += 1;
       if (b > a) t2 += 1;
     }
