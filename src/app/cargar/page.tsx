@@ -17,6 +17,17 @@ const getSafeFormat = (type: "martes" | "viernes", format: MatchFormat): MatchFo
     ? (format === "bo1_4" ? "bo1_4" : "bo1_6tb")
     : "bo3_6tb";
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  return "Error guardando draft";
+};
+
 export default function CargarPartidoPage() {
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -130,7 +141,7 @@ export default function CargarPartidoPage() {
       setSets(type === "viernes" ? [emptySet(1)] : defaultTuesdaySets);
       await loadData();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Error guardando draft");
+      alert(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
