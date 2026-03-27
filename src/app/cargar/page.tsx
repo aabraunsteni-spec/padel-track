@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Jugador, MatchFormat, MatchRow } from "@/lib/types";
 import { getOrCreateFridaySession, validateSetScore } from "@/lib/matches";
+import NavBar from "@/app/components/NavBar";
+import { useToast, ToastContainer } from "@/app/components/Toast";
+import ConfirmDialog from "@/app/components/ConfirmDialog";
 
 type SetForm = { set_no: number; games_team1: string; games_team2: string };
 
@@ -53,8 +55,11 @@ export default function CargarPartidoPage() {
   const [sets, setSets] = useState<SetForm[]>(defaultTuesdaySets);
   const [format, setFormat] = useState<MatchFormat>("bo3_6tb");
   const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const { toasts, removeToast, toast } = useToast();
+
+  const loadData = useCallback(async () => {
     const [{ data: players }, { data: matchData }] = await Promise.all([
       supabase.from("jugadores").select("id, nombre, slug").order("nombre", { ascending: true }),
       supabase
@@ -66,11 +71,11 @@ export default function CargarPartidoPage() {
 
     if (players) setJugadores(players as Jugador[]);
     if (matchData) setMatches(matchData as unknown as MatchRow[]);
-  };
+  }, []);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     if (type === "viernes") {
@@ -113,7 +118,7 @@ export default function CargarPartidoPage() {
 
   const saveDraft = async () => {
     if (validationError) {
-      alert(validationError);
+      toast.warning(validationError);
       return;
     }
 
@@ -121,7 +126,7 @@ export default function CargarPartidoPage() {
       setLoading(true);
       const sessionId = type === "viernes" ? await getOrCreateFridaySession(sessionDate) : null;
       const safeFormat = getDraftFormat(type, format, sets);
-    if (!safeFormat) return "Formato de viernes inválido";
+      if (!safeFormat) throw new Error("Formato de viernes inválido");
 
       const { data: match, error: matchError } = await supabase
         .from("matches")
@@ -152,13 +157,13 @@ export default function CargarPartidoPage() {
 
       if (playersError || setsError) throw playersError ?? setsError;
 
-      alert("Draft guardado");
+      toast.success("Draft guardado correctamente");
       setTeam1(["", ""]);
       setTeam2(["", ""]);
       setSets(type === "viernes" ? [emptySet(1)] : defaultTuesdaySets);
       await loadData();
     } catch (error) {
-      alert(getErrorMessage(error));
+      toast.error(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -167,40 +172,41 @@ export default function CargarPartidoPage() {
   const finalizeMatch = async (matchId: string) => {
     const { error } = await supabase.rpc("finalize_match", { p_match_id: matchId });
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
+    toast.success("Partido finalizado y Elo actualizado");
     await loadData();
   };
 
   const deleteMatch = async (matchId: string) => {
     const { error } = await supabase.rpc("delete_match", { p_match_id: matchId });
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
+    toast.success("Partido eliminado");
     await loadData();
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-6">
+    <main className="min-h-screen bg-[#020617] text-white p-6 pt-28">
+      <NavBar />
       <div className="max-w-5xl mx-auto space-y-8 py-10">
-        <Link href="/" className="text-gray-500 hover:text-white text-sm uppercase">← Volver</Link>
-
-        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-          <h1 className="text-2xl font-black text-green-400">Crear partido (draft)</h1>
+        <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 space-y-4">
+          <h1 className="text-2xl font-black text-[#bef264]">Crear partido (draft)</h1>
           <div className="grid md:grid-cols-2 gap-3">
-            <select value={type} onChange={(e) => setType(e.target.value as "martes" | "viernes")} className="bg-slate-800 p-3 rounded-xl">
+            <select value={type} onChange={(e) => setType(e.target.value as "martes" | "viernes")} className="bg-white/[0.05] border border-white/10 p-3 rounded-2xl">
               <option value="martes">Martes (BO3)</option>
               <option value="viernes">Viernes (BO1)</option>
             </select>
             {type === "viernes" && (
               <>
-                <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="bg-slate-800 p-3 rounded-xl" />
+                <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} className="bg-white/[0.05] border border-white/10 p-3 rounded-2xl" />
                 <select
                   value={format}
                   onChange={(e) => setFormat(e.target.value as "bo1_6tb" | "bo1_4")}
-                  className="bg-slate-800 p-3 rounded-xl md:col-span-2"
+                  className="bg-white/[0.05] border border-white/10 p-3 rounded-2xl md:col-span-2"
                 >
                   <option value="bo1_6tb">1 set a 6 (TB 7)</option>
                   <option value="bo1_4">Partido a 4 games</option>
@@ -229,7 +235,7 @@ export default function CargarPartidoPage() {
                         setTeam2(next);
                       }
                     }}
-                    className="w-full bg-slate-800 p-3 rounded-xl"
+                    className="w-full bg-white/[0.05] border border-white/10 p-3 rounded-2xl"
                   >
                     <option value="">Jugador</option>
                     {jugadores.map((j) => (
@@ -246,45 +252,59 @@ export default function CargarPartidoPage() {
             {sets.map((set, index) => (
               <div key={set.set_no} className="flex items-center gap-2">
                 <span className="w-16 text-xs text-slate-500">Set {set.set_no}</span>
-                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team1} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team1: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team1} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team1: e.target.value } : item))} className="w-20 bg-white/[0.05] border border-white/10 p-2 rounded-xl text-center" />
                 <span>-</span>
-                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team2} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team2: e.target.value } : item))} className="w-20 bg-slate-800 p-2 rounded-lg text-center" />
+                <input type="number" min={0} max={format === "bo1_4" ? 4 : 7} value={set.games_team2} onChange={(e) => setSets((prev) => prev.map((item) => item.set_no === set.set_no ? { ...item, games_team2: e.target.value } : item))} className="w-20 bg-white/[0.05] border border-white/10 p-2 rounded-xl text-center" />
                 {type === "martes" && index === sets.length - 1 && sets.length === 3 && (
                   <button className="text-xs text-red-400" onClick={() => setSets((prev) => prev.slice(0, 2))}>Quitar 3er set</button>
                 )}
               </div>
             ))}
             {type === "martes" && sets.length < 3 && (
-              <button onClick={() => setSets((prev) => [...prev, emptySet(3)])} className="text-xs text-green-400">+ Agregar tercer set</button>
+              <button onClick={() => setSets((prev) => [...prev, emptySet(3)])} className="text-xs text-[#bef264]">+ Agregar tercer set</button>
             )}
           </div>
 
           {validationError && <p className="text-amber-300 text-sm">⚠ {validationError}</p>}
-          <button onClick={saveDraft} disabled={loading} className="bg-green-500 text-black px-5 py-3 rounded-xl font-bold disabled:opacity-60">
+          <button onClick={saveDraft} disabled={loading || !!validationError} className="bg-[#bef264] text-black px-5 py-3 rounded-2xl font-black disabled:opacity-60">
             {loading ? "Guardando..." : "Guardar draft"}
           </button>
         </section>
 
-        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <section className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
           <h2 className="text-xl font-bold mb-4">Partidos recientes</h2>
           <div className="space-y-3">
             {matches.map((match) => {
-              const team1 = (match.match_players ?? []).filter((p) => p.team === 1).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
-              const team2 = (match.match_players ?? []).filter((p) => p.team === 2).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
+              const t1 = (match.match_players ?? []).filter((p) => p.team === 1).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
+              const t2 = (match.match_players ?? []).filter((p) => p.team === 2).map((p) => p.jugadores?.nombre).filter(Boolean).join(" & ");
               const setSummary = (match.match_sets ?? [])
                 .sort((a, b) => a.set_no - b.set_no)
                 .map((s) => `${s.games_team1}-${s.games_team2}`)
                 .join(" | ");
 
               return (
-                <div key={match.id} className="border border-slate-700 rounded-xl p-4">
+                <div key={match.id} className="bg-white/[0.02] border border-white/10 rounded-2xl p-4">
                   <p className="text-xs text-slate-500">{new Date(match.played_at).toLocaleString("es-AR")} · {match.type} · {match.format} · {match.status}</p>
-                  <p className="font-semibold">{team1} vs {team2}</p>
+                  <p className="font-semibold">{t1} vs {t2}</p>
                   <p className="text-sm text-slate-400">Sets: {setSummary || "-"}</p>
                   <p className="text-sm text-slate-400">Ganador: {match.winner_team ? `Equipo ${match.winner_team}` : "-"} · Games: {match.games_team1 ?? "-"}-{match.games_team2 ?? "-"}</p>
                   <div className="mt-3 flex gap-2">
-                    {match.status === "draft" && <button className="px-3 py-1 bg-blue-600 rounded-lg text-xs" onClick={() => finalizeMatch(match.id)}>Finalizar</button>}
-                    {match.status === "final" && <button className="px-3 py-1 bg-red-600 rounded-lg text-xs" onClick={() => deleteMatch(match.id)}>Borrar</button>}
+                    {match.status === "draft" && (
+                      <button
+                        className="px-3 py-1 bg-[#bef264]/20 border border-[#bef264]/30 text-[#bef264] rounded-xl text-xs"
+                        onClick={() => finalizeMatch(match.id)}
+                      >
+                        Finalizar
+                      </button>
+                    )}
+                    {match.status === "final" && (
+                      <button
+                        className="px-3 py-1 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs"
+                        onClick={() => setDeleteTarget(match.id)}
+                      >
+                        Borrar
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -292,6 +312,21 @@ export default function CargarPartidoPage() {
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Borrar partido final"
+        message="Esto va a revertir el Elo de los jugadores y no se puede deshacer. ¿Estás seguro?"
+        danger={true}
+        confirmLabel="Sí, borrar"
+        onConfirm={() => {
+          if (deleteTarget) void deleteMatch(deleteTarget);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </main>
   );
 }
